@@ -1,0 +1,5 @@
+{
+  "name": "Gemini Cloud Storage",
+  "description": "A modern cloud storage web application that allows users to manage files and leverage AI for insightful analytics. Features include real-time search, advanced filtering, and a clean, responsive interface.",
+  "requestFramePermissions": []
+}
