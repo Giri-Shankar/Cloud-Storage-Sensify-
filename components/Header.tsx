@@ -24,7 +24,6 @@ const Header: React.FC<HeaderProps> = ({ searchTerm, setSearchTerm }) => {
                 </button>
                 <a
                     href="https://giri-shankar.github.io/ai-analytics-page/"
-                    target="_blank"
                     rel="noopener noreferrer"
                     className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-slate-500 hover:bg-slate-100`}
                     >

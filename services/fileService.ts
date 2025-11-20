@@ -1,133 +1,180 @@
-import type { FileItem, FileType, SensorType } from '../types';
-import { FileType as FileTypeEnum, SensorType as SensorTypeEnum } from '../types';
+// Updated frontend file with proper state management
+import type { FileItem, FileType, SensorType } from "../types";
+import { FileType as FileTypeEnum, SensorType as SensorTypeEnum } from "../types";
 
-// WARNING: Storing API Secret on the client-side is a security risk.
-// This should be handled by a backend service in a production environment.
-const CLOUD_NAME = 'dsyinconz';
-const API_KEY = '333762471822787';
-const API_SECRET = '0lJ--RM1nizaH125ZgeTUvpdUcc';
-const AUTH_HEADER = `Basic ${btoa(`${API_KEY}:${API_SECRET}`)}`;
+const API_BASE_URL = "http://localhost:3001/api";
 
 const mapFormatToFileType = (format: string): FileType => {
   switch (format?.toLowerCase()) {
-    case 'pdf': return FileTypeEnum.PDF;
-    case 'png': return FileTypeEnum.PNG;
-    case 'csv': return FileTypeEnum.CSV;
-    case 'json': return FileTypeEnum.JSON;
-    case 'txt': return FileTypeEnum.TXT;
-    default: return FileTypeEnum.TXT;
+    case "pdf":
+      return FileTypeEnum.PDF;
+    case "png":
+    case "jpg":
+    case "jpeg":
+      return FileTypeEnum.PNG;
+    case "csv":
+      return FileTypeEnum.CSV;
+    case "json":
+      return FileTypeEnum.JSON;
+    case "txt":
+      return FileTypeEnum.TXT;
+    default:
+      return FileTypeEnum.TXT;
   }
 };
 
 const inferSensorTypeFromName = (name: string): SensorType => {
-  const lowerName = name.toLowerCase();
-  if (lowerName.includes('temp') && lowerName.includes('hum')) return SensorTypeEnum.DHT22;
-  if (lowerName.includes('light') || lowerName.includes('ldr') || lowerName.includes('intensity')) return SensorTypeEnum.LDR;
-  if (lowerName.includes('air') || lowerName.includes('aqi') || lowerName.includes('mq135')) return SensorTypeEnum.MQ135;
-  if (lowerName.includes('rain')) return SensorTypeEnum.Rain;
-  if (lowerName.includes('soil') || lowerName.includes('moisture')) return SensorTypeEnum.Soil;
+  const lower = name.toLowerCase();
+  if (lower.includes("dht") || lower.includes("temp") || lower.includes("hum"))
+    return SensorTypeEnum.DHT22;
+  if (lower.includes("ldr") || lower.includes("light") || lower.includes("lux"))
+    return SensorTypeEnum.LDR;
+  if (lower.includes("mq135") || lower.includes("air") || lower.includes("aqi"))
+    return SensorTypeEnum.MQ135;
+  if (lower.includes("rain")) return SensorTypeEnum.Rain;
+  if (lower.includes("soil")) return SensorTypeEnum.Soil;
   return SensorTypeEnum.None;
 };
 
 const mapCloudinaryResourceToFileItem = (resource: any): FileItem => {
   const fileType = mapFormatToFileType(resource.format);
   const sensorType = inferSensorTypeFromName(resource.public_id);
-  
+
   return {
     id: resource.public_id,
-    name: resource.format ? `${resource.public_id}.${resource.format}` : resource.public_id,
+    name: resource.original_filename || resource.public_id,
     size: resource.bytes,
     uploadedAt: resource.created_at,
     modifiedAt: resource.created_at,
     type: fileType,
-    sensorType: sensorType,
-    content: '',
+    sensorType,
+    content: "",
     url: resource.secure_url,
     resourceType: resource.resource_type,
   };
 };
 
+// FETCH FILES
 export const getFiles = async (): Promise<FileItem[]> => {
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/resources/search?expression=`, {
-    headers: { 'Authorization': AUTH_HEADER }
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(`Failed to fetch files from Cloudinary: ${error.error.message}`);
+  try {
+    console.log('Fetching files from:', `${API_BASE_URL}/files`);
+
+    const response = await fetch(`${API_BASE_URL}/files`);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Fetch error:', errorData);
+      throw new Error(errorData.error || "Failed to fetch files");
+    }
+
+    const resources = await response.json();
+    console.log('Received files:', resources.length);
+
+    return resources.map(mapCloudinaryResourceToFileItem);
+  } catch (error) {
+    console.error('getFiles error:', error);
+    throw error;
   }
-  const data = await response.json();
-  return data.resources.map(mapCloudinaryResourceToFileItem);
 };
 
-async function sha1(str: string): Promise<string> {
-  const buffer = new TextEncoder().encode(str);
-  const hashBuffer = await crypto.subtle.digest('SHA-1', buffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
+// UPLOAD FILE - Fixed to return proper response
 export const uploadFile = async (file: File): Promise<FileItem> => {
-    const timestamp = Math.round((new Date()).getTime() / 1000);
-    const publicId = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-    const stringToSign = `public_id=${publicId}&timestamp=${timestamp}${API_SECRET}`;
-    const signature = await sha1(stringToSign);
+  try {
+    const publicId = file.name.split(".").slice(0, -1).join(".") || file.name;
+    const form = new FormData();
+    form.append("file", file);
+    form.append("publicId", publicId);
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('api_key', API_KEY);
-    formData.append('timestamp', timestamp.toString());
-    formData.append('signature', signature);
-    formData.append('public_id', publicId);
+    console.log('Uploading file:', publicId);
 
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`, {
-        method: 'POST',
-        body: formData
+    const res = await fetch(`${API_BASE_URL}/files`, {
+      method: "POST",
+      body: form,
     });
 
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(`Failed to upload file: ${error.error.message}`);
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || "Upload failed");
     }
-    const data = await response.json();
-    return mapCloudinaryResourceToFileItem(data);
-};
 
-export const renameFile = async (file: FileItem, newName: string): Promise<FileItem> => {
-    const toPublicId = newName.substring(0, newName.lastIndexOf('.'));
-    const resourceType = file.resourceType || 'raw';
+    const data = await res.json();
+    console.log('Upload response:', data);
     
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/resources/${resourceType}/rename`, {
-        method: 'POST',
-        headers: {
-            'Authorization': AUTH_HEADER,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ from_public_id: file.id, to_public_id: toPublicId })
-    });
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(`Failed to rename file: ${error.error.message}`);
-    }
-    const data = await response.json();
+    // Return the properly mapped file item
     return mapCloudinaryResourceToFileItem(data);
+  } catch (error) {
+    console.error('Upload error:', error);
+    throw error;
+  }
 };
 
+// RENAME FILE - Fixed to handle extension properly
+export const renameFile = async (
+  file: FileItem,
+  newName: string
+): Promise<FileItem> => {
+  try {
+    // Keep the original extension from the file
+    const oldExtension = file.id.split('.').pop();
+    let newPublicId = newName;
+    
+    // Remove extension from newName if it was provided
+    newPublicId = newPublicId.replace(/\.[^/.]+$/, '');
+    
+    // Add back the original extension if the file had one
+    if (oldExtension && file.id.includes('.')) {
+      newPublicId = `${newPublicId}.${oldExtension}`;
+    }
+    
+    console.log('Renaming:', file.id, 'to:', newPublicId, 'type:', file.resourceType);
+    
+    const res = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(file.id)}/rename`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        newName: newPublicId,
+        resourceType: file.resourceType || "raw",
+      }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      console.error('Rename error response:', error);
+      throw new Error(error.error || "Rename failed");
+    }
+
+    const data = await res.json();
+    console.log('Rename response:', data);
+    
+    // Return the properly mapped file item with updated data
+    return mapCloudinaryResourceToFileItem(data);
+  } catch (error) {
+    console.error('Rename request failed:', error);
+    throw error;
+  }
+};
+
+// DELETE FILE
 export const deleteFile = async (file: FileItem): Promise<boolean> => {
-    const resourceType = file.resourceType || 'raw';
+  try {
+    console.log('Deleting file:', file.id, 'type:', file.resourceType);
     
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/resources/${resourceType}/destroy`, {
-        method: 'POST',
-        headers: {
-            'Authorization': AUTH_HEADER,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ public_id: file.id })
-    });
+    const res = await fetch(
+      `${API_BASE_URL}/files/${encodeURIComponent(file.id)}?resourceType=${file.resourceType || "raw"}`,
+      { method: "DELETE" }
+    );
 
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(`Failed to delete file: ${error.error.message}`);
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || "Delete failed");
     }
-    const data = await response.json();
-    return data.result === 'ok';
+
+    const data = await res.json();
+    console.log('Delete response:', data);
+    
+    return data.result === "ok";
+  } catch (error) {
+    console.error('Delete error:', error);
+    throw error;
+  }
 };

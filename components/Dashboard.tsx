@@ -75,17 +75,24 @@ const Dashboard: React.FC<DashboardProps> = ({ files, setFiles, isLoading, error
     return processedFiles;
   }, [files, searchTerm, filterType, sortOption]);
 
+  // ✅ FIXED: Update state immediately without refreshing
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     
     setIsUploading(true);
     try {
-        await uploadFile(file);
-        refreshFiles();
+        console.log('Uploading file:', file.name);
+        const uploadedFile = await uploadFile(file);
+        
+        // ✅ Add the new file to state immediately - NO LAG!
+        setFiles(prev => [uploadedFile, ...prev]);
+        
+        console.log('Upload successful:', uploadedFile);
     } catch (err) {
         console.error("Failed to upload file:", err);
-        // You might want to show a toast notification here
+        // Only refresh on error to sync with backend
+        refreshFiles();
     } finally {
         setIsUploading(false);
         if (fileInputRef.current) {
@@ -94,25 +101,44 @@ const Dashboard: React.FC<DashboardProps> = ({ files, setFiles, isLoading, error
     }
   };
 
+  // ✅ FIXED: Update state immediately without refreshing
   const handleRename = async (newName: string) => {
     if (!renamingFile) return;
     try {
-        await renameFile(renamingFile, newName);
-        refreshFiles();
+        console.log('Renaming file:', renamingFile.id, 'to:', newName);
+        const renamedFile = await renameFile(renamingFile, newName);
+        
+        // ✅ Update the specific file in state immediately - NO LAG!
+        setFiles(prev => 
+            prev.map(f => f.id === renamingFile.id ? renamedFile : f)
+        );
+        
+        console.log('Rename successful:', renamedFile);
     } catch (error) {
         console.error("Failed to rename file:", error);
+        // Only refresh on error to sync with backend
+        refreshFiles();
     } finally {
         setRenamingFile(null);
     }
   };
 
+  // ✅ FIXED: Update state immediately without refreshing
   const handleDelete = async () => {
     if (!deletingFile) return;
     try {
-        await deleteFile(deletingFile);
-        refreshFiles();
+        console.log('Deleting file:', deletingFile.id);
+        const success = await deleteFile(deletingFile);
+        
+        if (success) {
+            // ✅ Remove the file from state immediately - NO LAG!
+            setFiles(prev => prev.filter(f => f.id !== deletingFile.id));
+            console.log('Delete successful');
+        }
     } catch (error) {
         console.error("Failed to delete file:", error);
+        // Only refresh on error to sync with backend
+        refreshFiles();
     } finally {
         setDeletingFile(null);
     }

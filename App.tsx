@@ -21,6 +21,7 @@ const App: React.FC = () => {
       setFiles(fetchedFiles);
     } catch (err) {
       setError('Failed to fetch files.');
+      // console.log(err)
       console.error(err);
     } finally {
       setIsLoading(false);
