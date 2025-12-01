@@ -202,6 +202,6 @@ app.delete('/api/files/:id', async (req, res) => {
 });
 
 app.listen(3001, () => {
-    console.log('Backend running on http://localhost:3001');
+    console.log('Backend running on https://cloud-storage-sensify-backend.onrender.com');
     console.log('Cloudinary cloud:', process.env.CLOUD_NAME);
 });
