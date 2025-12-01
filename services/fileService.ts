@@ -5,7 +5,7 @@ import {
   SensorType as SensorTypeEnum,
 } from "../types";
 
-const API_BASE_URL = "http://localhost:3001/api";
+const API_BASE_URL = "https://cloud-storage-sensify-backend.onrender.com";
 
 const mapFormatToFileType = (format: string): FileType => {
   switch (format?.toLowerCase()) {
